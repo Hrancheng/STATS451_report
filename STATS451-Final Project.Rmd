@@ -1,0 +1,98 @@
+---
+title: "STATS451-Final Report"
+author: "Yueying Hu"
+date: "4/16/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(rstanarm)
+data <- read.csv("heart_2020_cleaned.csv")
+```
+
+```{r}
+for (i in 1:ncol(data)) {
+  if (length(unique(data[,i])) <= 10) {
+    data[,i] <- as.numeric(as.factor(data[, i]))
+  }
+}
+data$AgeCategory <- as.numeric(as.factor(data$AgeCategory))
+```
+
+```{r}
+set.seed(1)
+library(glmnet)
+x <- model.matrix(HeartDisease ~ ., data)[, -1]
+y <- data$HeartDisease
+grid <- 10^seq(10, -2, length = 100)
+cv.out <- cv.glmnet(x, y, alpha = 1)
+bestlam <- cv.out$lambda.min
+out <- glmnet(x, y, alpha = 1, lambda = grid)
+lasso.coef <- predict(out, type = "coefficients", s = bestlam)[1:18, ]
+lasso.coef <- lasso.coef[lasso.coef != 0]
+library(dplyr)
+data <- data %>% select(y, names(lasso.coef[-1]))
+```
+
+```{r}
+data$HeartDisease = data$HeartDisease - 1
+train.id <- sample(nrow(data), round(nrow(data) * 0.1))
+train <- data[train.id,]
+```
+
+```{r}
+fit1 <- stan_glm(HeartDisease ~ ., family = binomial(link = "logit"),
+                 data = train)
+```
+
+```{r}
+print(fit1, digits = 3)
+prior_summary(fit1)
+plot(fit1, plotfun = "areas", prob = 0.9,
+     pars = c("Smoking", "Stroke", "DiffWalking", "Sex"))
+plot(fit1, plotfun = "areas", prob = 0.9,
+     pars = c("AgeCategory", "Diabetic", "KidneyDisease", "SkinCancer"))
+plot(fit1, plotfun = "areas", prob = 0.9,
+     pars = c("BMI", "PhysicalHealth"))
+```
+
+```{r}
+par(mfrow = c(3, 3))
+plot(fit1, plotfun = "trace", regex_pars = "BMI") 
+plot(fit1, plotfun = "trace", regex_pars = "Smoking") 
+plot(fit1, plotfun = "trace", regex_pars = "Stroke") 
+plot(fit1, plotfun = "trace", regex_pars = "PhysicalHealth") 
+plot(fit1, plotfun = "trace", regex_pars = "DiffWalking")
+plot(fit1, plotfun = "trace", regex_pars = "Sex")
+plot(fit1, plotfun = "trace", regex_pars = "AgeCategory")
+plot(fit1, plotfun = "trace", regex_pars = "Diabetic")
+plot(fit1, plotfun = "trace", regex_pars = "KidneyDisease")
+plot(fit1, plotfun = "trace", regex_pars = "SkinCancer") 
+```
+
+
+```{r}
+fit2 <- stan_glm(HeartDisease ~ BMI + Smoking + Stroke + 
+                   PhysicalHealth + DiffWalking + Sex * AgeCategory +
+                   Diabetic + KidneyDisease + SkinCancer, 
+                 family = binomial(link = "logit"),
+                 data = train)
+```
+
+```{r}
+print(fit2, digits = 3)
+```
+
+```{r}
+summary(fit2)
+```
+
+```{r}
+plot(fit2, plotfun = "areas", prob = 0.9,
+     pars = c("Sex", "AgeCategory", "Sex:AgeCategory"))
+```
+
